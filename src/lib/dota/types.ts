@@ -1,0 +1,142 @@
+export type RankBucket = {
+  label: string;
+  picks: number;
+  wins: number;
+  winRate: number;
+};
+
+export type TrendPoint = {
+  label: string;
+  picks: number;
+  wins: number;
+  winRate: number;
+};
+
+export type HeroSummary = {
+  id: number;
+  slug: string;
+  name: string;
+  primaryAttr: "str" | "agi" | "int" | "all" | string;
+  attackType: string;
+  roles: string[];
+  imageUrl: string;
+  iconUrl: string;
+  pubPick: number;
+  pubWin: number;
+  pubWinRate: number;
+  proPick: number;
+  proBan: number;
+  proWinRate: number | null;
+  rankBuckets: RankBucket[];
+  trend: TrendPoint[];
+};
+
+export type HeroMatchup = {
+  heroId: number;
+  heroName: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  advantage: number;
+};
+
+export type ItemTiming = {
+  phase: "Start" | "Early" | "Mid" | "Late";
+  itemId: number;
+  name: string;
+  count: number;
+  cost: number | null;
+  imageUrl: string | null;
+};
+
+export type PlayerMatch = {
+  matchId: number;
+  heroId: number;
+  heroName: string;
+  result: "Win" | "Loss";
+  duration: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  gpm: number;
+  xpm: number;
+  heroDamage: number;
+  towerDamage: number;
+  startTime: number;
+  averageRank: number | null;
+};
+
+export type PlayerProfile = {
+  accountId: string;
+  recentMatches: PlayerMatch[];
+  winRate: number;
+  avgKda: number;
+  avgGpm: number;
+  avgXpm: number;
+  signatureHeroes: Array<{
+    heroId: number;
+    heroName: string;
+    matches: number;
+    winRate: number;
+  }>;
+};
+
+export type MatchEvent = {
+  time: number;
+  label: string;
+  type: string;
+  side: "Radiant" | "Dire" | "Neutral";
+};
+
+export type MapPoint = {
+  x: number;
+  y: number;
+  kind: "Observer" | "Sentry" | "Death" | "Lane";
+  side: "Radiant" | "Dire" | "Neutral";
+  time: number;
+  intensity: number;
+  label: string;
+};
+
+export type MatchReplay = {
+  matchId: number;
+  duration: number;
+  radiantWin: boolean;
+  radiantScore: number;
+  direScore: number;
+  leagueName: string | null;
+  events: MatchEvent[];
+  mapPoints: MapPoint[];
+  teamfights: Array<{
+    start: number;
+    end: number;
+    deaths: number;
+  }>;
+};
+
+export type DataSourceStatus = {
+  name: string;
+  status: "live" | "fallback" | "optional";
+  note: string;
+};
+
+export type DotaOverview = {
+  generatedAt: string;
+  patchVersion: string;
+  selectedHero: HeroSummary;
+  heroMeta: HeroSummary[];
+  matchups: HeroMatchup[];
+  items: ItemTiming[];
+  player: PlayerProfile;
+  match: MatchReplay;
+  proMatches: Array<{
+    matchId: number;
+    radiantName: string;
+    direName: string;
+    radiantScore: number;
+    direScore: number;
+    duration: number;
+    leagueName: string;
+  }>;
+  sources: DataSourceStatus[];
+};
