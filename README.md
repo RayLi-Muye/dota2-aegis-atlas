@@ -2,6 +2,8 @@
 
 Serverless Dota2 intelligence dashboard built with Next.js App Router.
 
+See [VISION.md](VISION.md) for the product thesis, roadmap themes, and data-source boundaries.
+
 The first version focuses on a usable analytics workbench instead of a landing page:
 
 - hero meta table with pub/pro pick and win-rate signals
