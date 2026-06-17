@@ -1,0 +1,35 @@
+name: Feature Request
+description: Propose a product capability for Aegis Atlas.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User Outcome
+      description: What user question or workflow should this feature support?
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data Source Boundary
+      description: Public OpenDota, fallback/sample data, or credentialed provider?
+      placeholder: "OpenDota public API only. No credentialed provider access."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Observable behavior and validation checks.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk / Privacy / Rollback
+      description: Data, privacy, provider, or rollback considerations.
+    validations:
+      required: true

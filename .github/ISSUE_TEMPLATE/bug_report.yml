@@ -1,0 +1,35 @@
+name: Bug Report
+description: Report a reproducible product, API, data, or workflow bug.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed Behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Steps, route, account ID, match ID, or command.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Target
+      description: Test, command, or smoke check that should pass after the fix.
+      placeholder: "- npm run lint\n- npm run build"
+    validations:
+      required: true

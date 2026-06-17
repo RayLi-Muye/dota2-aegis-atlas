@@ -1,0 +1,38 @@
+name: Maintenance Task
+description: Low-risk maintenance, governance, docs, CI, or dependency hygiene.
+title: "[Maintenance] "
+labels:
+  - maintenance
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should change, and what is explicitly out of scope?
+      placeholder: "Add CI baseline. Do not change runtime behavior."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Concrete checks that prove the work is done.
+      placeholder: "- CI runs lint and build on pull requests."
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: Commands, screenshots, API checks, or GitHub Actions expected.
+      placeholder: "- npm ci\n- npm run lint\n- npm run build"
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk / Rollback
+      description: Expected risk and how to roll back.
+      placeholder: "Low risk; revert the PR."
+    validations:
+      required: true
