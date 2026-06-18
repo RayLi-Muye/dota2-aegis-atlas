@@ -86,6 +86,7 @@ Ask first:
 Before routine PR merge:
 
 - `npm run lint`
+- `npm run test:api`
 - `npm run build`
 - GitHub Actions green
 - focused API route smoke when API/provider behavior changes
