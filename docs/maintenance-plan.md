@@ -31,11 +31,12 @@ These are the initial maintenance-loop candidates. Treat each repo independently
 - Next.js App Router project.
 - Serverless OpenDota routes.
 - Dashboard UI for hero meta, counters, player form, replay event nodes, item timings, and map heat.
+- Serverless hero detail route and dashboard hero selector for matchup and item timing insights.
 - 3-hour thread heartbeat configured.
 
 ### Next Build Items
 
-- Add hero detail route with selectable hero IDs instead of one featured hero.
+- Extend hero detail with patch-aware win rates and role/rank comparison.
 - Add item/ability/talent lookup backed by OpenDota constants.
 - Add optional STRATZ provider for patch-specific win rates, talent stats, and pro meta.
 - Add Steam auth/account-linking plan if personal/private player data is needed.

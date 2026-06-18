@@ -40,6 +40,17 @@ export type HeroMatchup = {
   advantage: number;
 };
 
+export type HeroDetailInsight = {
+  strongestEdge: HeroMatchup | null;
+  biggestThreat: HeroMatchup | null;
+  bestRankBucket: RankBucket | null;
+  sampleSize: number;
+  itemCoverage: number;
+  trendDelta: number;
+  trendDirection: "up" | "down" | "flat";
+  notes: string[];
+};
+
 export type ItemTiming = {
   phase: "Start" | "Early" | "Mid" | "Late";
   itemId: number;
@@ -138,5 +149,15 @@ export type DotaOverview = {
     duration: number;
     leagueName: string;
   }>;
+  sources: DataSourceStatus[];
+};
+
+export type HeroDetail = {
+  generatedAt: string;
+  patchVersion: string;
+  hero: HeroSummary;
+  matchups: HeroMatchup[];
+  items: ItemTiming[];
+  insight: HeroDetailInsight;
   sources: DataSourceStatus[];
 };

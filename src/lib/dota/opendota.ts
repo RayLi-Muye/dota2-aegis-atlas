@@ -1,6 +1,9 @@
-import { fallbackMatch, fallbackOverview, fallbackPlayer } from "./fallback";
+import { fallbackHeroes, fallbackMatch, fallbackOverview, fallbackPlayer } from "./fallback";
 import type {
   DotaOverview,
+  DataSourceStatus,
+  HeroDetail,
+  HeroDetailInsight,
   HeroMatchup,
   HeroSummary,
   ItemTiming,
@@ -206,6 +209,88 @@ function toMatchups(
     })
     .sort((a, b) => Math.abs(b.advantage) - Math.abs(a.advantage))
     .slice(0, 12);
+}
+
+function fallbackMatchupsForHero(selectedHero: HeroSummary): HeroMatchup[] {
+  return fallbackHeroes
+    .filter((hero) => hero.id !== selectedHero.id)
+    .map((hero, index) => {
+      const games = 160 - index * 11;
+      const matchupWinRate = Math.max(0.38, Math.min(0.62, selectedHero.pubWinRate + (index - 3) * 0.012));
+      return {
+        heroId: hero.id,
+        heroName: hero.name,
+        games,
+        wins: Math.round(games * matchupWinRate),
+        winRate: matchupWinRate,
+        advantage: selectedHero.pubWinRate - matchupWinRate,
+      };
+    })
+    .sort((a, b) => Math.abs(b.advantage) - Math.abs(a.advantage))
+    .slice(0, 12);
+}
+
+function heroTrendDelta(hero: HeroSummary): number {
+  const first = hero.trend[0]?.winRate;
+  const last = hero.trend.at(-1)?.winRate;
+  if (typeof first !== "number" || typeof last !== "number") {
+    return 0;
+  }
+  return last - first;
+}
+
+function trendDirection(delta: number): HeroDetailInsight["trendDirection"] {
+  if (delta > 0.002) {
+    return "up";
+  }
+  if (delta < -0.002) {
+    return "down";
+  }
+  return "flat";
+}
+
+function toHeroInsight(
+  hero: HeroSummary,
+  matchups: HeroMatchup[],
+  items: ItemTiming[],
+  sourceStatus: DataSourceStatus["status"],
+): HeroDetailInsight {
+  const sortedEdges = [...matchups].sort((a, b) => b.advantage - a.advantage);
+  const sortedThreats = [...matchups].sort((a, b) => a.advantage - b.advantage);
+  const trendDelta = heroTrendDelta(hero);
+  const bestRankBucket =
+    [...hero.rankBuckets].filter((bucket) => bucket.picks > 0).sort((a, b) => b.winRate - a.winRate || b.picks - a.picks)[0] ?? null;
+
+  return {
+    strongestEdge: sortedEdges.find((matchup) => matchup.advantage > 0) ?? null,
+    biggestThreat: sortedThreats.find((matchup) => matchup.advantage < 0) ?? null,
+    bestRankBucket,
+    sampleSize: matchups.reduce((sum, matchup) => sum + matchup.games, 0),
+    itemCoverage: items.reduce((sum, item) => sum + item.count, 0),
+    trendDelta,
+    trendDirection: trendDirection(trendDelta),
+    notes: [
+      sourceStatus === "fallback" ? "Using bundled fallback/sample data." : "Using OpenDota public API data.",
+      "Patch-specific win rates, talent stats, and credentialed provider data remain future scoped work.",
+    ],
+  };
+}
+
+function fallbackHeroDetail(heroId: string | number): HeroDetail {
+  const requestedHeroId = Number(heroId);
+  const hero = fallbackHeroes.find((candidate) => candidate.id === requestedHeroId) ?? fallbackOverview.selectedHero;
+  const matchups = fallbackMatchupsForHero(hero);
+  const items = fallbackOverview.items;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    patchVersion: fallbackOverview.patchVersion,
+    hero,
+    matchups,
+    items,
+    insight: toHeroInsight(hero, matchups, items, "fallback"),
+    sources: fallbackOverview.sources,
+  };
 }
 
 function topItemsForPhase(
@@ -463,6 +548,41 @@ export async function getHeroMeta(): Promise<HeroSummary[]> {
     .map(toHeroSummary)
     .filter((hero) => hero.pubPick > 0)
     .sort((a, b) => b.pubPick - a.pubPick);
+}
+
+export async function getHeroDetail(heroId: string | number): Promise<HeroDetail> {
+  try {
+    const requestedHeroId = Number(heroId);
+    const heroMeta = await getHeroMeta();
+    const heroMap = new Map(heroMeta.map((hero) => [hero.id, hero]));
+    const hero = heroMap.get(requestedHeroId) ?? heroMeta[0] ?? fallbackOverview.selectedHero;
+
+    const [matchupsRaw, itemPopularity, itemConstants] = await Promise.all([
+      fetchJson<OpenDotaMatchup[]>(`/heroes/${hero.id}/matchups`, 900),
+      fetchJson<Record<string, Record<string, number>>>(`/heroes/${hero.id}/itemPopularity`, 1800),
+      fetchJson<Record<string, OpenDotaItem>>("/constants/items", 86_400),
+    ]);
+
+    const matchups = toMatchups(matchupsRaw, hero, heroMap);
+    const items = toItemTimings(itemPopularity, itemConstants);
+    const sources: DataSourceStatus[] = [
+      { name: "OpenDota", status: "live", note: "Public API for hero detail, matchups, item popularity, and current meta signals." },
+      { name: "Steam Web API", status: "optional", note: "Not used for this slice; credentialed access remains future scoped work." },
+      { name: "STRATZ GraphQL", status: "optional", note: "Not used for this slice; patch and talent data remain future scoped work." },
+    ];
+
+    return {
+      generatedAt: new Date().toISOString(),
+      patchVersion: "OpenDota live hero detail",
+      hero,
+      matchups,
+      items,
+      insight: toHeroInsight(hero, matchups, items, "live"),
+      sources,
+    };
+  } catch {
+    return fallbackHeroDetail(heroId);
+  }
 }
 
 export async function getPlayerProfile(accountId: string, heroMap?: Map<number, HeroSummary>): Promise<PlayerProfile> {
