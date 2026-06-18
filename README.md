@@ -72,6 +72,7 @@ Build and lint before opening a PR:
 
 ```bash
 npm run lint
+npm run test:api
 npm run build
 ```
 
@@ -103,10 +104,11 @@ Common commands:
 npm ci
 npm run dev
 npm run lint
+npm run test:api
 npm run build
 ```
 
-The baseline CI gate runs install, lint, and build. For UI or API work, also run focused route smoke checks or browser smoke where the local environment supports it. Record any browser/tooling limitation in the pull request validation notes.
+The baseline CI gate runs install, lint, provider-level API fallback tests, and build. For UI work, also run focused route smoke checks or browser smoke where the local environment supports it. Record any browser/tooling limitation in the pull request validation notes.
 
 ## Repository Map
 

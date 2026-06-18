@@ -30,5 +30,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: API fallback tests
+        run: npm run test:api
+
       - name: Build
         run: npm run build
