@@ -19,7 +19,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
-import type { DotaOverview, MatchReplay, PlayerProfile } from "@/lib/dota/types";
+import type { DotaOverview, HeroDetail, HeroDetailInsight, MatchReplay, PlayerProfile } from "@/lib/dota/types";
 
 type DotaDashboardProps = {
   initialData: DotaOverview;
@@ -66,10 +66,41 @@ function sideClass(side: "Radiant" | "Dire" | "Neutral") {
   return "text-amber-200";
 }
 
+function deltaPercent(value: number): string {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${(value * 100).toFixed(1)}pp`;
+}
+
+function buildClientHeroInsight(
+  hero: DotaOverview["selectedHero"],
+  matchups: DotaOverview["matchups"],
+  items: DotaOverview["items"],
+): HeroDetailInsight {
+  const trendDelta = (hero.trend.at(-1)?.winRate ?? hero.pubWinRate) - (hero.trend[0]?.winRate ?? hero.pubWinRate);
+  const strongestEdge = [...matchups].sort((a, b) => b.advantage - a.advantage).find((matchup) => matchup.advantage > 0) ?? null;
+  const biggestThreat = [...matchups].sort((a, b) => a.advantage - b.advantage).find((matchup) => matchup.advantage < 0) ?? null;
+  const bestRankBucket =
+    [...hero.rankBuckets].filter((bucket) => bucket.picks > 0).sort((a, b) => b.winRate - a.winRate || b.picks - a.picks)[0] ?? null;
+
+  return {
+    strongestEdge,
+    biggestThreat,
+    bestRankBucket,
+    sampleSize: matchups.reduce((sum, matchup) => sum + matchup.games, 0),
+    itemCoverage: items.reduce((sum, item) => sum + item.count, 0),
+    trendDelta,
+    trendDirection: trendDelta > 0.002 ? "up" : trendDelta < -0.002 ? "down" : "flat",
+    notes: ["OpenDota public or bundled fallback data only.", "Patch win rates, talents, and credentialed providers remain roadmap work."],
+  };
+}
+
 export function DotaDashboard({ initialData }: DotaDashboardProps) {
   const [data, setData] = useState(initialData);
   const [playerQuery, setPlayerQuery] = useState(initialData.player.accountId);
   const [matchQuery, setMatchQuery] = useState(String(initialData.match.matchId));
+  const [heroInsight, setHeroInsight] = useState(() =>
+    buildClientHeroInsight(initialData.selectedHero, initialData.matchups, initialData.items),
+  );
   const [notice, setNotice] = useState("OpenDota live feed loaded");
   const [isPending, startTransition] = useTransition();
 
@@ -81,6 +112,24 @@ export function DotaDashboard({ initialData }: DotaDashboardProps) {
         .slice(0, 6),
     [data.heroMeta],
   );
+
+  const updateHero = (heroId: number) => {
+    startTransition(async () => {
+      const response = await fetch(`/api/dota/hero/${encodeURIComponent(String(heroId))}`);
+      const detail = (await response.json()) as HeroDetail;
+      setData((current) => ({
+        ...current,
+        generatedAt: detail.generatedAt,
+        patchVersion: detail.patchVersion,
+        selectedHero: detail.hero,
+        matchups: detail.matchups,
+        items: detail.items,
+        sources: detail.sources,
+      }));
+      setHeroInsight(detail.insight);
+      setNotice(`${detail.hero.name} detail loaded`);
+    });
+  };
 
   const updatePlayer = () => {
     const accountId = playerQuery.trim();
@@ -115,6 +164,7 @@ export function DotaDashboard({ initialData }: DotaDashboardProps) {
       setData(overview);
       setPlayerQuery(overview.player.accountId);
       setMatchQuery(String(overview.match.matchId));
+      setHeroInsight(buildClientHeroInsight(overview.selectedHero, overview.matchups, overview.items));
       setNotice("Overview refreshed from serverless route");
     });
   };
@@ -166,8 +216,17 @@ export function DotaDashboard({ initialData }: DotaDashboardProps) {
 
           <div className="mx-auto flex max-w-[1540px] flex-col gap-4 overflow-x-hidden px-4 py-4 md:px-6 md:py-5">
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.48fr)_minmax(360px,0.72fr)]">
-              <HeroMetaPanel data={data} topWinRate={topWinRate} />
-              <PlayerPanel player={data.player} />
+              <HeroMetaPanel
+                data={data}
+                isPending={isPending}
+                onSelectHero={updateHero}
+                selectedHeroId={data.selectedHero.id}
+                topWinRate={topWinRate}
+              />
+              <div className="grid gap-4">
+                <HeroDetailPanel hero={data.selectedHero} insight={heroInsight} />
+                <PlayerPanel player={data.player} />
+              </div>
             </div>
 
             <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(420px,0.95fr)_minmax(0,1.05fr)]">
@@ -184,7 +243,7 @@ export function DotaDashboard({ initialData }: DotaDashboardProps) {
               <span>
                 {notice} · generated {formatDate(data.generatedAt)} · {data.patchVersion}
               </span>
-              <span>Serverless API routes: /api/dota/overview, /api/dota/player/:id, /api/dota/match/:id</span>
+              <span>Serverless API routes: /api/dota/overview, /api/dota/hero/:id, /api/dota/player/:id, /api/dota/match/:id</span>
             </footer>
           </div>
         </section>
@@ -327,12 +386,24 @@ function Panel({
   );
 }
 
-function HeroMetaPanel({ data, topWinRate }: { data: DotaOverview; topWinRate: DotaOverview["heroMeta"] }) {
+function HeroMetaPanel({
+  data,
+  isPending,
+  onSelectHero,
+  selectedHeroId,
+  topWinRate,
+}: {
+  data: DotaOverview;
+  isPending: boolean;
+  onSelectHero: (heroId: number) => void;
+  selectedHeroId: number;
+  topWinRate: DotaOverview["heroMeta"];
+}) {
   return (
     <Panel icon={<Activity className="size-4" />} title="Hero Meta" action="Current public and pro signal">
       <div className="grid min-w-0 gap-0 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="border-b border-white/8 p-4 lg:border-b-0 lg:border-r">
-            <div className="relative overflow-hidden rounded-lg border border-emerald-300/18 bg-emerald-300/[0.045] p-3 sm:p-4">
+          <div className="relative overflow-hidden rounded-lg border border-emerald-300/18 bg-emerald-300/[0.045] p-3 sm:p-4">
             <div className="absolute right-0 top-0 h-32 w-32 bg-emerald-300/10 blur-3xl" />
             <div className="relative flex items-start gap-3">
               <Image
@@ -374,7 +445,7 @@ function HeroMetaPanel({ data, topWinRate }: { data: DotaOverview; topWinRate: D
         </div>
 
         <div className="min-w-0 overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <table className="w-full min-w-[780px] text-left text-sm">
             <thead className="text-xs uppercase tracking-[0.12em] text-slate-500">
               <tr className="border-b border-white/8">
                 <th className="px-4 py-3 font-medium">Hero</th>
@@ -383,13 +454,15 @@ function HeroMetaPanel({ data, topWinRate }: { data: DotaOverview; topWinRate: D
                 <th className="px-3 py-3 font-medium">Pub win</th>
                 <th className="px-3 py-3 font-medium">Pro pick</th>
                 <th className="px-3 py-3 font-medium">7d trend</th>
+                <th className="px-4 py-3 text-right font-medium">Detail</th>
               </tr>
             </thead>
             <tbody>
               {data.heroMeta.slice(0, 10).map((hero) => {
                 const lastTrend = hero.trend.at(-1)?.winRate ?? hero.pubWinRate;
+                const selected = hero.id === selectedHeroId;
                 return (
-                  <tr className="border-b border-white/6 last:border-b-0" key={hero.id}>
+                  <tr className={`border-b border-white/6 last:border-b-0 ${selected ? "bg-emerald-300/[0.045]" : ""}`} key={hero.id}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <Image alt={hero.name} className="rounded-md" height={30} src={hero.iconUrl} width={30} />
@@ -403,6 +476,22 @@ function HeroMetaPanel({ data, topWinRate }: { data: DotaOverview; topWinRate: D
                     <td className="px-3 py-3">
                       <MiniTrend points={hero.trend.map((point) => point.winRate)} tone={lastTrend >= hero.pubWinRate ? "green" : "red"} />
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        aria-label={`Inspect ${hero.name}`}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition ${
+                          selected
+                            ? "border-emerald-300/30 bg-emerald-300/14 text-emerald-100"
+                            : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]"
+                        }`}
+                        disabled={isPending || selected}
+                        onClick={() => onSelectHero(hero.id)}
+                        type="button"
+                      >
+                        <Crosshair className="size-3.5" />
+                        {selected ? "Open" : "Inspect"}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -411,6 +500,63 @@ function HeroMetaPanel({ data, topWinRate }: { data: DotaOverview; topWinRate: D
         </div>
       </div>
     </Panel>
+  );
+}
+
+function HeroDetailPanel({ hero, insight }: { hero: DotaOverview["selectedHero"]; insight: HeroDetailInsight }) {
+  const trendTone = insight.trendDirection === "down" ? "red" : insight.trendDirection === "up" ? "green" : "slate";
+
+  return (
+    <Panel icon={<Crosshair className="size-4" />} title="Hero Detail" action="OpenDota public slice">
+      <div className="space-y-4 p-4">
+        <div className="flex items-start gap-3">
+          <Image alt={hero.name} className="rounded-md" height={38} src={hero.iconUrl} width={38} />
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-semibold text-white">{hero.name}</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {hero.attackType} · {hero.primaryAttr.toUpperCase()} · {hero.roles.slice(0, 3).join(" / ")}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Metric label="Trend" value={deltaPercent(insight.trendDelta)} tone={trendTone} />
+          <Metric label="Samples" value={integer(insight.sampleSize)} />
+          <Metric label="Best rank" value={insight.bestRankBucket ? insight.bestRankBucket.label : "-"} tone="green" />
+          <Metric label="Items" value={integer(insight.itemCoverage)} />
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <InsightRow
+            label="Strongest edge"
+            tone="green"
+            value={insight.strongestEdge ? `${insight.strongestEdge.heroName} · ${deltaPercent(insight.strongestEdge.advantage)}` : "-"}
+          />
+          <InsightRow
+            label="Biggest threat"
+            tone="red"
+            value={insight.biggestThreat ? `${insight.biggestThreat.heroName} · ${deltaPercent(insight.biggestThreat.advantage)}` : "-"}
+          />
+        </div>
+
+        <div className="border-t border-white/8 pt-3">
+          {insight.notes.map((note) => (
+            <p className="text-xs leading-5 text-slate-500" key={note}>
+              {note}
+            </p>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function InsightRow({ label, tone, value }: { label: string; tone: "green" | "red"; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className={`truncate text-right font-medium ${tone === "green" ? "text-emerald-200" : "text-rose-200"}`}>{value}</span>
+    </div>
   );
 }
 

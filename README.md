@@ -27,11 +27,12 @@ npm run lint
 
 ```text
 GET /api/dota/overview
+GET /api/dota/hero/:heroId
 GET /api/dota/player/:accountId
 GET /api/dota/match/:matchId
 ```
 
-The OpenDota provider has fallback data so local builds and demos still render if the public API is temporarily unavailable.
+The hero detail route returns a hero summary, matchup matrix, item timings, and lightweight insight summaries. The OpenDota provider has fallback data so local builds and demos still render if the public API is temporarily unavailable.
 
 ## Data Sources
 

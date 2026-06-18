@@ -20,6 +20,7 @@ The baseline data model is intentionally conservative:
 The current MVP demonstrates the core dashboard shape:
 
 - Hero meta table with public and pro pick/win-rate signals.
+- Selectable hero detail with matchup and item timing insights.
 - Hero counter matrix from OpenDota matchup data.
 - Player recent-match form by Steam account ID.
 - Match event timeline by match ID.
@@ -95,7 +96,7 @@ Future work:
 
 1. Bootstrap GitHub-native maintenance workflow.
 2. Document product vision and roadmap.
-3. Add hero detail route with selectable hero IDs.
+3. Expand hero detail into patch-aware win-rate and role/rank views.
 4. Add item, ability, and talent lookup boundaries.
 5. Add route-level tests for API normalization and fallback behavior.
 6. Add dashboard desktop/mobile visual smoke coverage.
