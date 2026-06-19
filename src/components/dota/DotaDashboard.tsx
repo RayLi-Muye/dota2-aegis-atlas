@@ -19,10 +19,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
-import type { DotaOverview, HeroDetail, HeroDetailInsight, MatchReplay, PlayerProfile } from "@/lib/dota/types";
+import type { BuildLookupBoundary, DotaOverview, HeroDetail, HeroDetailInsight, MatchReplay, PlayerProfile } from "@/lib/dota/types";
 
 type DotaDashboardProps = {
   initialData: DotaOverview;
+  lookupBoundaries: BuildLookupBoundary[];
 };
 
 const numberFormatter = new Intl.NumberFormat("en", {
@@ -94,7 +95,7 @@ function buildClientHeroInsight(
   };
 }
 
-export function DotaDashboard({ initialData }: DotaDashboardProps) {
+export function DotaDashboard({ initialData, lookupBoundaries }: DotaDashboardProps) {
   const [data, setData] = useState(initialData);
   const [playerQuery, setPlayerQuery] = useState(initialData.player.accountId);
   const [matchQuery, setMatchQuery] = useState(String(initialData.match.matchId));
@@ -236,7 +237,7 @@ export function DotaDashboard({ initialData }: DotaDashboardProps) {
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.82fr)]">
               <TimelinePanel match={data.match} />
-              <ItemsPanel data={data} />
+              <ItemsPanel data={data} lookupBoundaries={lookupBoundaries} />
             </div>
 
             <footer className="flex flex-col gap-2 border-t border-white/8 py-4 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
@@ -774,7 +775,7 @@ function TimelinePanel({ match }: { match: MatchReplay }) {
   );
 }
 
-function ItemsPanel({ data }: { data: DotaOverview }) {
+function ItemsPanel({ data, lookupBoundaries }: { data: DotaOverview; lookupBoundaries: BuildLookupBoundary[] }) {
   return (
     <Panel icon={<Trophy className="size-4" />} title="Items, Skills & Talents" action={`${data.selectedHero.name} build path`}>
       <div className="grid grid-cols-2 gap-3 p-4">
@@ -799,21 +800,47 @@ function ItemsPanel({ data }: { data: DotaOverview }) {
         })}
       </div>
       <div className="border-t border-white/8 p-4">
-        <div className="grid gap-3 md:grid-cols-3">
-          <RoadmapPill title="Skills" text="OpenDota constants now; STRATZ provider planned for per-patch ability builds." />
-          <RoadmapPill title="Talents" text="Token-backed provider slot for current talent win/pick distribution." />
-          <RoadmapPill title="Version" text="Patch-aware endpoints will sit behind the same serverless provider interface." />
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Lookup boundaries</p>
+            <p className="mt-1 text-sm text-slate-300">Public data is available now; credentialed distribution analytics stay future scope.</p>
+          </div>
+          <span className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
+            Read-only
+          </span>
+        </div>
+        <div className="grid gap-3">
+          {lookupBoundaries.map((boundary) => (
+            <LookupBoundaryCard boundary={boundary} key={boundary.domain} />
+          ))}
         </div>
       </div>
     </Panel>
   );
 }
 
-function RoadmapPill({ title, text }: { title: string; text: string }) {
+function LookupBoundaryCard({ boundary }: { boundary: BuildLookupBoundary }) {
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.025] p-3">
-      <p className="text-sm font-medium text-slate-200">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{text}</p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-100">{boundary.label}</p>
+        <span className="rounded-md bg-white/8 px-2 py-1 text-[11px] uppercase tracking-[0.1em] text-slate-400">{boundary.domain}</span>
+      </div>
+      <div className="space-y-3">
+        <BoundaryRow label="Public today" text={boundary.publicDataToday.join(" ")} />
+        <BoundaryRow label="Current use" text={boundary.currentProductUse} />
+        <BoundaryRow label="Fallback" text={boundary.fallbackPolicy} />
+        <BoundaryRow label="Provider-only" text={boundary.credentialedProviderNeededFor.join(" ")} />
+      </div>
+    </div>
+  );
+}
+
+function BoundaryRow({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[96px_minmax(0,1fr)] sm:gap-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="text-xs leading-5 text-slate-400">{text}</p>
     </div>
   );
 }
