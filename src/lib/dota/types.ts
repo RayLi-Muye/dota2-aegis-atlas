@@ -60,6 +60,20 @@ export type ItemTiming = {
   imageUrl: string | null;
 };
 
+export type BuildLookupDomain = "items" | "abilities" | "talents";
+
+export type BuildLookupBoundary = {
+  domain: BuildLookupDomain;
+  label: string;
+  publicDataToday: string[];
+  currentProductUse: string;
+  fallbackPolicy: string;
+  credentialedProviderNeededFor: string[];
+  explicitNonGoals: string[];
+};
+
+export type BuildLookupBoundaryMap = Record<BuildLookupDomain, BuildLookupBoundary>;
+
 export type PlayerMatch = {
   matchId: number;
   heroId: number;

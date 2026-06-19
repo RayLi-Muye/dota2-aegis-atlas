@@ -19,15 +19,7 @@ Every heartbeat should:
 
 ## Current Priority
 
-Both routine repositories should keep high-readability README and GitHub About metadata:
-
-- explain what the repo does;
-- identify who it is for;
-- list core capabilities;
-- provide quick start and local development commands;
-- map architecture and repository layout;
-- link roadmap and contribution workflow;
-- make safety and authorization boundaries explicit.
+Keep public-data feature work moving through small, testable provider-contract slices before any credentialed provider work.
 
 ## Aegis Atlas Backlog
 
@@ -42,7 +34,7 @@ Both routine repositories should keep high-readability README and GitHub About m
 ### Next Build Items
 
 - Extend hero detail with patch-aware win rates and role/rank comparison.
-- Add item/ability/talent lookup backed by OpenDota constants.
+- Wire item/ability/talent lookup UI over the documented public-data boundary.
 - Add optional STRATZ provider for patch-specific win rates, talent stats, and pro meta after explicit credential authorization.
 - Add Steam auth/account-linking plan if personal/private player data is needed.
 - Persist searches and favorites only after a storage and privacy decision.

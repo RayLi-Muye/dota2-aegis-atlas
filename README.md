@@ -96,6 +96,18 @@ The hero detail route returns a hero summary, matchup matrix, item timings, and 
 
 Do not add credentialed provider access, paid API use, private player data storage, production data operations, or cloud resource mutations without explicit authorization.
 
+## Item, Ability, And Talent Lookup Boundaries
+
+Build lookup work stays public-data-first:
+
+| Domain | Public data available today | Requires credentialed provider later |
+| --- | --- | --- |
+| Items | OpenDota `/constants/items` metadata and `/heroes/{heroId}/itemPopularity` phase buckets | Patch/rank/role-filtered item trends and personalized build recommendations |
+| Abilities | Static OpenDota ability metadata for future name/icon lookup | Hero-specific skill build timelines and ability pick/win distributions |
+| Talents | Static talent labels where represented in public ability constants | Talent pick/win distributions and patch/bracket-filtered talent analysis |
+
+The reusable contract lives in `src/lib/dota/lookup-boundaries.ts`. Fallback item, ability, or talent examples are only for local demos and outage resilience; they should never be treated as current match, current patch, or personalized truth.
+
 ## Local Development
 
 Common commands:
@@ -127,9 +139,9 @@ VISION.md                    Product thesis and roadmap themes
 Near-term work should stay small and public-data-first:
 
 1. Add patch-aware hero win rates and role/rank comparison.
-2. Add item, ability, and talent lookup boundaries.
-3. Add route-level tests for API normalization and fallback behavior.
-4. Add dashboard desktop/mobile visual smoke coverage.
+2. Wire public item, ability, and talent lookup UI against the documented boundary.
+3. Add dashboard desktop/mobile visual smoke coverage.
+4. Expand route/provider test coverage as new lookup surfaces are wired.
 5. Document credentialed provider requirements before adding Steam, STRATZ, or paid OpenDota access.
 6. Explore time-filtered ward, lane, objective, and fight layers for match replay views.
 

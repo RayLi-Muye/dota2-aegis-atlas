@@ -53,11 +53,18 @@ Future work:
 
 ### Items, Skills, And Talents
 
-Move from item popularity toward full build understanding. Start with OpenDota constants and public item timing data, then document credentialed provider needs before adding token-backed talent or ability distributions.
+Move from item popularity toward full build understanding. Start with OpenDota constants and public item timing data, keep ability/talent lookup limited to static public metadata, and require an explicitly authorized provider before adding hero-specific skill order or talent distribution analytics.
+
+Boundary today:
+
+- Items can use public OpenDota item constants and hero item popularity buckets.
+- Abilities can use public static ability metadata once lookup is wired, but not skill-order distribution claims.
+- Talents can use static labels where public constants expose them, but not pick/win distribution claims.
+- Fallback examples support demos and outage resilience only; they are not current-patch truth.
 
 Future work:
 
-- Item and ability lookup.
+- Item, ability, and talent lookup UI over the public-data boundary.
 - Hero-specific skill build timeline.
 - Talent pick/win distribution behind an explicitly authorized provider.
 - Patch comparison for item and talent changes.
@@ -97,6 +104,6 @@ Future work:
 1. Bootstrap GitHub-native maintenance workflow.
 2. Document product vision and roadmap.
 3. Expand hero detail into patch-aware win-rate and role/rank views.
-4. Add item, ability, and talent lookup boundaries.
-5. Add route-level tests for API normalization and fallback behavior.
+4. Use documented item, ability, and talent lookup boundaries to wire lookup UI.
+5. Expand route/provider tests as new provider surfaces are added.
 6. Add dashboard desktop/mobile visual smoke coverage.
