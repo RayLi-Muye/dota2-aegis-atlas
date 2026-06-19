@@ -57,6 +57,10 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+function lastUpdatedLabel(value: string | null): string {
+  return value ? `Last updated ${formatDate(value)}` : "No cached update yet";
+}
+
 function sideClass(side: "Radiant" | "Dire" | "Neutral") {
   if (side === "Radiant") {
     return "text-emerald-300";
@@ -91,7 +95,7 @@ function buildClientHeroInsight(
     itemCoverage: items.reduce((sum, item) => sum + item.count, 0),
     trendDelta,
     trendDirection: trendDelta > 0.002 ? "up" : trendDelta < -0.002 ? "down" : "flat",
-    notes: ["OpenDota public or bundled fallback data only.", "Patch win rates, talents, and credentialed providers remain roadmap work."],
+    notes: ["OpenDota public data uses live responses or last cached refreshes before sample data.", "Patch win rates, talents, and credentialed providers remain roadmap work."],
   };
 }
 
@@ -121,6 +125,8 @@ export function DotaDashboard({ initialData, lookupBoundaries }: DotaDashboardPr
       setData((current) => ({
         ...current,
         generatedAt: detail.generatedAt,
+        dataFreshness: detail.dataFreshness,
+        dataLastUpdated: detail.dataLastUpdated,
         patchVersion: detail.patchVersion,
         selectedHero: detail.hero,
         matchups: detail.matchups,
@@ -128,7 +134,7 @@ export function DotaDashboard({ initialData, lookupBoundaries }: DotaDashboardPr
         sources: detail.sources,
       }));
       setHeroInsight(detail.insight);
-      setNotice(`${detail.hero.name} detail loaded`);
+      setNotice(`${detail.hero.name} detail loaded · ${lastUpdatedLabel(detail.dataLastUpdated)}`);
     });
   };
 
@@ -166,7 +172,7 @@ export function DotaDashboard({ initialData, lookupBoundaries }: DotaDashboardPr
       setPlayerQuery(overview.player.accountId);
       setMatchQuery(String(overview.match.matchId));
       setHeroInsight(buildClientHeroInsight(overview.selectedHero, overview.matchups, overview.items));
-      setNotice("Overview refreshed from serverless route");
+      setNotice(`Overview refreshed from serverless route · ${lastUpdatedLabel(overview.dataLastUpdated)}`);
     });
   };
 
@@ -244,6 +250,7 @@ export function DotaDashboard({ initialData, lookupBoundaries }: DotaDashboardPr
               <span>
                 {notice} · generated {formatDate(data.generatedAt)} · {data.patchVersion}
               </span>
+              <span>{lastUpdatedLabel(data.dataLastUpdated)}</span>
               <span>Serverless API routes: /api/dota/overview, /api/dota/hero/:id, /api/dota/player/:id, /api/dota/match/:id</span>
             </footer>
           </div>
@@ -306,7 +313,9 @@ function Sidebar({ sources }: { sources: DotaOverview["sources"] }) {
                   className={`rounded-md px-2 py-1 text-[11px] font-medium ${
                     source.status === "live"
                       ? "bg-emerald-300/12 text-emerald-200"
-                      : source.status === "fallback"
+                      : source.status === "stale"
+                        ? "bg-cyan-300/12 text-cyan-200"
+                        : source.status === "sample"
                         ? "bg-amber-300/12 text-amber-200"
                         : "bg-slate-400/10 text-slate-400"
                   }`}
@@ -314,6 +323,9 @@ function Sidebar({ sources }: { sources: DotaOverview["sources"] }) {
                   {source.status}
                 </span>
               </div>
+              {source.status !== "optional" ? (
+                <p className="mt-2 text-xs font-medium text-slate-400">{lastUpdatedLabel(source.lastUpdated)}</p>
+              ) : null}
               <p className="mt-2 text-xs leading-5 text-slate-500">{source.note}</p>
             </div>
           ))}

@@ -1,5 +1,6 @@
 import { fallbackHeroes, fallbackMatch, fallbackOverview, fallbackPlayer } from "./fallback";
 import type {
+  DataFreshness,
   DotaOverview,
   DataSourceStatus,
   HeroDetail,
@@ -18,6 +19,21 @@ const OPENDOTA_BASE = "https://api.opendota.com/api";
 const STEAM_ASSET_BASE = "https://cdn.cloudflare.steamstatic.com";
 const SAMPLE_ACCOUNT_ID = "86745912";
 const MAX_MATCH_POINTS = 70;
+
+type OpenDotaCacheEntry<T> = {
+  data: T;
+  updatedAt: string;
+};
+
+type OpenDotaFetchResult<T> = OpenDotaCacheEntry<T> & {
+  freshness: Exclude<DataFreshness, "sample">;
+};
+
+type CacheGlobal = typeof globalThis & {
+  __aegisOpenDotaCache?: Map<string, OpenDotaCacheEntry<unknown>>;
+};
+
+const openDotaCache = ((globalThis as CacheGlobal).__aegisOpenDotaCache ??= new Map());
 
 type OpenDotaHero = {
   id: number;
@@ -128,21 +144,61 @@ function ratio(wins: number | undefined, games: number | undefined): number {
   return wins / games;
 }
 
-async function fetchJson<T>(path: string, revalidateSeconds = 900): Promise<T> {
-  const response = await fetch(`${OPENDOTA_BASE}${path}`, {
-    headers: {
-      accept: "application/json",
-      "user-agent": "AegisAtlas/0.1 (+https://github.com/RayLi-Muye)",
-    },
-    next: { revalidate: revalidateSeconds },
-    signal: AbortSignal.timeout(10_000),
-  });
+export function resetOpenDotaCacheForTests(): void {
+  openDotaCache.clear();
+}
 
-  if (!response.ok) {
-    throw new Error(`OpenDota ${path} returned ${response.status}`);
+async function fetchJson<T>(path: string, revalidateSeconds = 900): Promise<OpenDotaFetchResult<T>> {
+  try {
+    const response = await fetch(`${OPENDOTA_BASE}${path}`, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "AegisAtlas/0.1 (+https://github.com/RayLi-Muye)",
+      },
+      next: { revalidate: revalidateSeconds },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenDota ${path} returned ${response.status}`);
+    }
+
+    const data = (await response.json()) as T;
+    const updatedAt = new Date().toISOString();
+    openDotaCache.set(path, { data, updatedAt });
+    return { data, updatedAt, freshness: "live" };
+  } catch (error) {
+    const cached = openDotaCache.get(path) as OpenDotaCacheEntry<T> | undefined;
+    if (cached) {
+      return { ...cached, freshness: "stale" };
+    }
+    throw error;
   }
+}
 
-  return response.json() as Promise<T>;
+function dataFreshness(results: Array<Pick<OpenDotaFetchResult<unknown>, "freshness">>): Exclude<DataFreshness, "sample"> {
+  return results.some((result) => result.freshness === "stale") ? "stale" : "live";
+}
+
+function oldestUpdatedAt(results: Array<Pick<OpenDotaFetchResult<unknown>, "updatedAt">>): string {
+  return results.map((result) => result.updatedAt).sort()[0] ?? new Date().toISOString();
+}
+
+function openDotaSources(freshness: DataFreshness, lastUpdated: string | null, liveNote: string): DataSourceStatus[] {
+  const staleNote = lastUpdated
+    ? `Using last cached OpenDota data because live refresh failed. Last updated ${lastUpdated}.`
+    : "No cached OpenDota data is available; showing bundled sample data for local resilience.";
+
+  return [
+    {
+      name: "OpenDota",
+      status: freshness,
+      lastUpdated,
+      note: freshness === "live" ? liveNote : freshness === "stale" ? staleNote : staleNote,
+    },
+    { name: "Steam Web API", status: "optional", lastUpdated: null, note: "Provider slot for official Steam-backed endpoints and account-linked workflows." },
+    { name: "STRATZ GraphQL", status: "optional", lastUpdated: null, note: "Provider slot for patch-specific hero, talent, and advanced meta data once a token is configured." },
+  ];
 }
 
 function toHeroSummary(hero: OpenDotaHero): HeroSummary {
@@ -253,7 +309,7 @@ function toHeroInsight(
   hero: HeroSummary,
   matchups: HeroMatchup[],
   items: ItemTiming[],
-  sourceStatus: DataSourceStatus["status"],
+  freshness: DataFreshness,
 ): HeroDetailInsight {
   const sortedEdges = [...matchups].sort((a, b) => b.advantage - a.advantage);
   const sortedThreats = [...matchups].sort((a, b) => a.advantage - b.advantage);
@@ -270,7 +326,11 @@ function toHeroInsight(
     trendDelta,
     trendDirection: trendDirection(trendDelta),
     notes: [
-      sourceStatus === "fallback" ? "Using bundled fallback/sample data." : "Using OpenDota public API data.",
+      freshness === "live"
+        ? "Using live OpenDota public API data."
+        : freshness === "stale"
+          ? "Using last cached OpenDota public API data."
+          : "Using bundled sample data because no cached OpenDota data is available.",
       "Patch-specific win rates, talent stats, and credentialed provider data remain future scoped work.",
     ],
   };
@@ -284,11 +344,13 @@ function fallbackHeroDetail(heroId: string | number): HeroDetail {
 
   return {
     generatedAt: new Date().toISOString(),
+    dataFreshness: "sample",
+    dataLastUpdated: null,
     patchVersion: fallbackOverview.patchVersion,
     hero,
     matchups,
     items,
-    insight: toHeroInsight(hero, matchups, items, "fallback"),
+    insight: toHeroInsight(hero, matchups, items, "sample"),
     sources: fallbackOverview.sources,
   };
 }
@@ -543,7 +605,7 @@ function toMatchReplay(match: OpenDotaMatch, heroMap: Map<number, HeroSummary>):
 }
 
 export async function getHeroMeta(): Promise<HeroSummary[]> {
-  const heroes = await fetchJson<OpenDotaHero[]>("/heroStats", 600);
+  const { data: heroes } = await fetchJson<OpenDotaHero[]>("/heroStats", 600);
   return heroes
     .map(toHeroSummary)
     .filter((hero) => hero.pubPick > 0)
@@ -553,42 +615,61 @@ export async function getHeroMeta(): Promise<HeroSummary[]> {
 export async function getHeroDetail(heroId: string | number): Promise<HeroDetail> {
   try {
     const requestedHeroId = Number(heroId);
-    const heroMeta = await getHeroMeta();
+    const heroMetaResult = await fetchJson<OpenDotaHero[]>("/heroStats", 600);
+    const heroMeta = heroMetaResult.data
+      .map(toHeroSummary)
+      .filter((hero) => hero.pubPick > 0)
+      .sort((a, b) => b.pubPick - a.pubPick);
     const heroMap = new Map(heroMeta.map((hero) => [hero.id, hero]));
     const hero = heroMap.get(requestedHeroId) ?? heroMeta[0] ?? fallbackOverview.selectedHero;
 
     const [matchupsRaw, itemPopularity, itemConstants] = await Promise.all([
-      fetchJson<OpenDotaMatchup[]>(`/heroes/${hero.id}/matchups`, 900),
-      fetchJson<Record<string, Record<string, number>>>(`/heroes/${hero.id}/itemPopularity`, 1800),
-      fetchJson<Record<string, OpenDotaItem>>("/constants/items", 86_400),
+      fetchJson<OpenDotaMatchup[]>(`/heroes/${hero.id}/matchups`, 900).catch(() => ({
+        data: [],
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
+      fetchJson<Record<string, Record<string, number>>>(`/heroes/${hero.id}/itemPopularity`, 1800).catch(() => ({
+        data: {},
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
+      fetchJson<Record<string, OpenDotaItem>>("/constants/items", 86_400).catch(() => ({
+        data: {},
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
     ]);
 
-    const matchups = toMatchups(matchupsRaw, hero, heroMap);
-    const items = toItemTimings(itemPopularity, itemConstants);
-    const sources: DataSourceStatus[] = [
-      { name: "OpenDota", status: "live", note: "Public API for hero detail, matchups, item popularity, and current meta signals." },
-      { name: "Steam Web API", status: "optional", note: "Not used for this slice; credentialed access remains future scoped work." },
-      { name: "STRATZ GraphQL", status: "optional", note: "Not used for this slice; patch and talent data remain future scoped work." },
-    ];
+    const fetchResults = [heroMetaResult, matchupsRaw, itemPopularity, itemConstants];
+    const freshness = dataFreshness(fetchResults);
+    const lastUpdated = oldestUpdatedAt(fetchResults);
+    const matchups = toMatchups(matchupsRaw.data, hero, heroMap);
+    const items = toItemTimings(itemPopularity.data, itemConstants.data);
 
     return {
       generatedAt: new Date().toISOString(),
-      patchVersion: "OpenDota live hero detail",
+      dataFreshness: freshness,
+      dataLastUpdated: lastUpdated,
+      patchVersion: freshness === "stale" ? `OpenDota cached hero detail from ${lastUpdated}` : "OpenDota live hero detail",
       hero,
       matchups,
       items,
-      insight: toHeroInsight(hero, matchups, items, "live"),
-      sources,
+      insight: toHeroInsight(hero, matchups, items, freshness),
+      sources: openDotaSources(freshness, lastUpdated, "Public API for hero detail, matchups, item popularity, and current meta signals."),
     };
   } catch {
-    return fallbackHeroDetail(heroId);
+    return {
+      ...fallbackHeroDetail(heroId),
+      generatedAt: new Date().toISOString(),
+    };
   }
 }
 
 export async function getPlayerProfile(accountId: string, heroMap?: Map<number, HeroSummary>): Promise<PlayerProfile> {
   try {
     const heroes = heroMap ?? new Map((await getHeroMeta()).map((hero) => [hero.id, hero]));
-    const matches = await fetchJson<OpenDotaRecentMatch[]>(`/players/${encodeURIComponent(accountId)}/recentMatches`, 300);
+    const { data: matches } = await fetchJson<OpenDotaRecentMatch[]>(`/players/${encodeURIComponent(accountId)}/recentMatches`, 300);
     return toPlayerProfile(accountId, matches, heroes);
   } catch {
     return { ...fallbackPlayer, accountId };
@@ -598,7 +679,7 @@ export async function getPlayerProfile(accountId: string, heroMap?: Map<number, 
 export async function getMatchReplay(matchId: string | number, heroMap?: Map<number, HeroSummary>): Promise<MatchReplay> {
   try {
     const heroes = heroMap ?? new Map((await getHeroMeta()).map((hero) => [hero.id, hero]));
-    const match = await fetchJson<OpenDotaMatch>(`/matches/${encodeURIComponent(String(matchId))}`, 3600);
+    const { data: match } = await fetchJson<OpenDotaMatch>(`/matches/${encodeURIComponent(String(matchId))}`, 3600);
     return toMatchReplay(match, heroes);
   } catch {
     return { ...fallbackMatch, matchId: Number(matchId) || fallbackMatch.matchId };
@@ -607,32 +688,58 @@ export async function getMatchReplay(matchId: string | number, heroMap?: Map<num
 
 export async function getDotaOverview(): Promise<DotaOverview> {
   try {
-    const heroMeta = (await getHeroMeta()).slice(0, 24);
+    const heroMetaResult = await fetchJson<OpenDotaHero[]>("/heroStats", 600);
+    const heroMeta = heroMetaResult.data
+      .map(toHeroSummary)
+      .filter((hero) => hero.pubPick > 0)
+      .sort((a, b) => b.pubPick - a.pubPick)
+      .slice(0, 24);
     const heroMap = new Map(heroMeta.map((hero) => [hero.id, hero]));
     const selectedHero =
       heroMeta.find((hero) => hero.proPick >= 20 && hero.pubWinRate >= 0.5) ?? heroMeta[0] ?? fallbackOverview.selectedHero;
 
     const [matchupsRaw, itemPopularity, itemConstants, player, proMatchesRaw] = await Promise.all([
-      fetchJson<OpenDotaMatchup[]>(`/heroes/${selectedHero.id}/matchups`, 900).catch(() => []),
-      fetchJson<Record<string, Record<string, number>>>(`/heroes/${selectedHero.id}/itemPopularity`, 1800).catch(() => ({})),
-      fetchJson<Record<string, OpenDotaItem>>("/constants/items", 86_400).catch(() => ({})),
+      fetchJson<OpenDotaMatchup[]>(`/heroes/${selectedHero.id}/matchups`, 900).catch(() => ({
+        data: [],
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
+      fetchJson<Record<string, Record<string, number>>>(`/heroes/${selectedHero.id}/itemPopularity`, 1800).catch(() => ({
+        data: {},
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
+      fetchJson<Record<string, OpenDotaItem>>("/constants/items", 86_400).catch(() => ({
+        data: {},
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
       getPlayerProfile(SAMPLE_ACCOUNT_ID, heroMap),
-      fetchJson<OpenDotaProMatch[]>("/proMatches", 300).catch(() => []),
+      fetchJson<OpenDotaProMatch[]>("/proMatches", 300).catch(() => ({
+        data: [],
+        updatedAt: heroMetaResult.updatedAt,
+        freshness: heroMetaResult.freshness,
+      })),
     ]);
 
-    const firstMatchId = proMatchesRaw.find((match) => match.version !== null)?.match_id ?? fallbackMatch.matchId;
+    const firstMatchId = proMatchesRaw.data.find((match) => match.version !== null)?.match_id ?? fallbackMatch.matchId;
     const match = await getMatchReplay(firstMatchId, heroMap);
+    const fetchResults = [heroMetaResult, matchupsRaw, itemPopularity, itemConstants, proMatchesRaw];
+    const freshness = dataFreshness(fetchResults);
+    const lastUpdated = oldestUpdatedAt(fetchResults);
 
     return {
       generatedAt: new Date().toISOString(),
-      patchVersion: `OpenDota match version ${proMatchesRaw.find((row) => row.version)?.version ?? "live"}`,
+      dataFreshness: freshness,
+      dataLastUpdated: lastUpdated,
+      patchVersion: freshness === "stale" ? `OpenDota cached data from ${lastUpdated}` : `OpenDota match version ${proMatchesRaw.data.find((row) => row.version)?.version ?? "live"}`,
       selectedHero,
       heroMeta,
-      matchups: toMatchups(matchupsRaw, selectedHero, heroMap),
-      items: toItemTimings(itemPopularity, itemConstants),
+      matchups: toMatchups(matchupsRaw.data, selectedHero, heroMap),
+      items: toItemTimings(itemPopularity.data, itemConstants.data),
       player,
       match,
-      proMatches: proMatchesRaw.slice(0, 8).map((row) => ({
+      proMatches: proMatchesRaw.data.slice(0, 8).map((row) => ({
         matchId: row.match_id,
         radiantName: row.radiant_name ?? "Radiant",
         direName: row.dire_name ?? "Dire",
@@ -641,11 +748,7 @@ export async function getDotaOverview(): Promise<DotaOverview> {
         duration: row.duration,
         leagueName: row.league_name ?? "Unknown league",
       })),
-      sources: [
-        { name: "OpenDota", status: "live", note: "Public API for hero stats, player matches, parsed match events, wards, and item popularity." },
-        { name: "Steam Web API", status: "optional", note: "Provider slot for official Steam-backed endpoints and account-linked workflows." },
-        { name: "STRATZ GraphQL", status: "optional", note: "Provider slot for patch-specific hero, talent, and advanced meta data once a token is configured." },
-      ],
+      sources: openDotaSources(freshness, lastUpdated, "Public API for hero stats, player matches, parsed match events, wards, and item popularity."),
     };
   } catch {
     return {

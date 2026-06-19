@@ -139,14 +139,19 @@ export type MatchReplay = {
   }>;
 };
 
+export type DataFreshness = "live" | "stale" | "sample";
+
 export type DataSourceStatus = {
   name: string;
-  status: "live" | "fallback" | "optional";
+  status: DataFreshness | "optional";
   note: string;
+  lastUpdated: string | null;
 };
 
 export type DotaOverview = {
   generatedAt: string;
+  dataFreshness: DataFreshness;
+  dataLastUpdated: string | null;
   patchVersion: string;
   selectedHero: HeroSummary;
   heroMeta: HeroSummary[];
@@ -168,6 +173,8 @@ export type DotaOverview = {
 
 export type HeroDetail = {
   generatedAt: string;
+  dataFreshness: DataFreshness;
+  dataLastUpdated: string | null;
   patchVersion: string;
   hero: HeroSummary;
   matchups: HeroMatchup[];

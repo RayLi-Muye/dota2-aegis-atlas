@@ -6,12 +6,13 @@ The product should feel like an analyst workbench: dense, fast to scan, and grou
 
 ## Current Product Thesis
 
-Build a trustworthy MVP on public OpenDota data first, with bundled fallback data only for local resilience and demos. The app should make clear which numbers are live, which are sampled, and which are planned provider slots.
+Build a trustworthy MVP on public OpenDota data first, with stale cached public data as the first outage fallback and bundled sample data only for cold-start resilience and demos. The app should make clear which numbers are live, stale, sampled, and which provider slots are planned.
 
 The baseline data model is intentionally conservative:
 
 - OpenDota public API is the current live source.
-- Fallback/sample data keeps the app renderable when OpenDota is unavailable.
+- Stale cached OpenDota data keeps the app useful when OpenDota is temporarily unavailable after a successful refresh.
+- Bundled sample data keeps the app renderable only when no cached OpenDota data exists.
 - Steam Web API, STRATZ GraphQL, paid OpenDota access, and other credentialed providers are future integrations that require explicit authorization before use.
 - Private player data storage and production data operations are out of scope until a separate privacy and infrastructure plan exists.
 
@@ -95,7 +96,8 @@ Future work:
 
 - Prefer public, reproducible data before credentialed integrations.
 - Keep provider boundaries visible in the UI and docs.
-- Treat fallback data as resilience, not truth.
+- Prefer last cached public data over bundled sample data during outages, and show the last updated timestamp.
+- Treat bundled sample data as resilience, not truth.
 - Ship small GitHub-native increments through issue, branch, PR, CI, and merge decision.
 - Keep product work separate from deploys, releases, production data operations, and sensitive credentials.
 
