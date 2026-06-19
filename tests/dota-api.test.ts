@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
+import {
+  getBuildLookupBoundary,
+  listBuildLookupBoundaries,
+  requiresCredentialedProviderForDistribution,
+} from "../src/lib/dota/lookup-boundaries";
 import { getDotaOverview, getHeroDetail } from "../src/lib/dota/opendota";
 
 type RoutePayload = unknown | Response | Error;
@@ -68,6 +73,41 @@ describe("Dota API provider contracts", () => {
     assert.equal(heroDetail.sources[0].status, "fallback");
     assert.equal(heroDetail.hero.id, 35);
     assert.match(heroDetail.insight.notes.join(" "), /fallback\/sample data/);
+  });
+});
+
+describe("Build lookup source boundaries", () => {
+  it("keeps item lookup limited to public OpenDota data and non-authoritative fallback", () => {
+    const items = getBuildLookupBoundary("items");
+
+    assert.match(items.publicDataToday.join(" "), /\/constants\/items/);
+    assert.match(items.publicDataToday.join(" "), /itemPopularity/);
+    assert.match(items.fallbackPolicy, /not current-match or current-patch truth/);
+    assert.ok(requiresCredentialedProviderForDistribution("items"));
+  });
+
+  it("does not claim public ability or talent distribution support", () => {
+    const abilities = getBuildLookupBoundary("abilities");
+    const talents = getBuildLookupBoundary("talents");
+
+    assert.match(abilities.currentProductUse, /not surfaced yet/);
+    assert.match(abilities.credentialedProviderNeededFor.join(" "), /skill build timelines/);
+    assert.match(talents.currentProductUse, /does not claim public talent pick or win distribution/);
+    assert.match(talents.credentialedProviderNeededFor.join(" "), /Talent pick and win distributions/);
+  });
+
+  it("keeps credentialed providers out of the current boundary work", () => {
+    const boundaries = listBuildLookupBoundaries();
+
+    assert.deepEqual(
+      boundaries.map((boundary) => boundary.domain),
+      ["items", "abilities", "talents"],
+    );
+    assert.ok(
+      boundaries.every((boundary) =>
+        boundary.explicitNonGoals.some((goal) => /No (Steam|STRATZ|paid|credentialed|private|production)/i.test(goal)),
+      ),
+    );
   });
 });
 
