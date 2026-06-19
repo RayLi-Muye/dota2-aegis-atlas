@@ -6,7 +6,7 @@ import {
   listBuildLookupBoundaries,
   requiresCredentialedProviderForDistribution,
 } from "../src/lib/dota/lookup-boundaries";
-import { getDotaOverview, getHeroDetail } from "../src/lib/dota/opendota";
+import { getDotaOverview, getHeroDetail, resetOpenDotaCacheForTests } from "../src/lib/dota/opendota";
 
 type RoutePayload = unknown | Response | Error;
 
@@ -14,6 +14,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  resetOpenDotaCacheForTests();
 });
 
 describe("Dota API provider contracts", () => {
@@ -32,6 +33,8 @@ describe("Dota API provider contracts", () => {
 
     assert.equal(overview.sources[0].name, "OpenDota");
     assert.equal(overview.sources[0].status, "live");
+    assert.equal(overview.dataFreshness, "live");
+    assert.match(overview.dataLastUpdated ?? "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(overview.selectedHero.id, 2);
     assert.equal(overview.selectedHero.name, "Axe");
     assert.equal(overview.matchups[0].heroName, "Sniper");
@@ -52,6 +55,8 @@ describe("Dota API provider contracts", () => {
     const detail = await getHeroDetail(2);
 
     assert.equal(detail.sources[0].status, "live");
+    assert.equal(detail.dataFreshness, "live");
+    assert.match(detail.dataLastUpdated ?? "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(detail.hero.id, 2);
     assert.equal(detail.hero.name, "Axe");
     assert.equal(detail.matchups[0].heroName, "Sniper");
@@ -60,7 +65,35 @@ describe("Dota API provider contracts", () => {
     assert.match(detail.insight.notes.join(" "), /OpenDota public API data/);
   });
 
-  it("falls back when OpenDota returns unusable responses", async () => {
+  it("uses stale cached OpenDota data before bundled sample data", async () => {
+    mockOpenDota({
+      "/heroStats": liveHeroes,
+      "/heroes/2/matchups": [{ hero_id: 35, games_played: 88, wins: 39 }],
+      "/heroes/2/itemPopularity": itemPopularity,
+      "/constants/items": itemConstants,
+    });
+
+    const liveDetail = await getHeroDetail(2);
+
+    mockOpenDota({
+      "/heroStats": new Response("service unavailable", { status: 503 }),
+      "/heroes/2/matchups": new Response("service unavailable", { status: 503 }),
+      "/heroes/2/itemPopularity": new Response("service unavailable", { status: 503 }),
+      "/constants/items": new Response("service unavailable", { status: 503 }),
+    });
+
+    const staleDetail = await getHeroDetail(2);
+
+    assert.equal(staleDetail.sources[0].status, "stale");
+    assert.equal(staleDetail.dataFreshness, "stale");
+    assert.equal(staleDetail.dataLastUpdated, liveDetail.dataLastUpdated);
+    assert.equal(staleDetail.hero.name, "Axe");
+    assert.equal(staleDetail.items[0].name, "Iron Branch");
+    assert.match(staleDetail.sources[0].note, /last cached OpenDota data/i);
+    assert.match(staleDetail.insight.notes.join(" "), /last cached OpenDota public API data/);
+  });
+
+  it("uses bundled sample data only when no OpenDota cache exists", async () => {
     mockOpenDota({
       "/heroStats": new Response("service unavailable", { status: 503 }),
     });
@@ -68,11 +101,15 @@ describe("Dota API provider contracts", () => {
     const overview = await getDotaOverview();
     const heroDetail = await getHeroDetail(35);
 
-    assert.equal(overview.sources[0].status, "fallback");
+    assert.equal(overview.sources[0].status, "sample");
+    assert.equal(overview.dataFreshness, "sample");
+    assert.equal(overview.dataLastUpdated, null);
     assert.equal(overview.selectedHero.name, "Axe");
-    assert.equal(heroDetail.sources[0].status, "fallback");
+    assert.equal(heroDetail.sources[0].status, "sample");
+    assert.equal(heroDetail.dataFreshness, "sample");
+    assert.equal(heroDetail.dataLastUpdated, null);
     assert.equal(heroDetail.hero.id, 35);
-    assert.match(heroDetail.insight.notes.join(" "), /fallback\/sample data/);
+    assert.match(heroDetail.insight.notes.join(" "), /bundled sample data/);
   });
 });
 

@@ -29,11 +29,13 @@ Keep public-data feature work moving through small, testable provider-contract s
 - Serverless OpenDota routes.
 - Dashboard UI for hero meta, counters, player form, replay event nodes, item timings, and map heat.
 - Serverless hero detail route and dashboard hero selector for matchup and item timing insights.
+- Stale cached OpenDota fallback metadata with `Last updated` user-facing timestamps.
 - GitHub-native CI, issue templates, PR template, and product vision.
 
 ### Next Build Items
 
 - Extend hero detail with patch-aware win rates and role/rank comparison.
+- Expand stale-cache tests across player and match routes.
 - Wire item/ability/talent lookup UI over the documented public-data boundary.
 - Add optional STRATZ provider for patch-specific win rates, talent stats, and pro meta after explicit credential authorization.
 - Add Steam auth/account-linking plan if personal/private player data is needed.

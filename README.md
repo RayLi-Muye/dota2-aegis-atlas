@@ -2,7 +2,7 @@
 
 Serverless Dota2 intelligence dashboard built with Next.js App Router and public OpenDota data.
 
-Aegis Atlas is an analyst-style workbench for exploring hero meta, matchup signals, player form, match timelines, item paths, and replay-derived map data. The baseline experience uses public OpenDota endpoints plus bundled fallback data so the app can build and demo without private credentials.
+Aegis Atlas is an analyst-style workbench for exploring hero meta, matchup signals, player form, match timelines, item paths, and replay-derived map data. The baseline experience uses public OpenDota endpoints, serves the last cached public data during warm-runtime outages, and keeps bundled sample data only for cold-start demos without private credentials.
 
 ## Jump To
 
@@ -66,7 +66,7 @@ npm ci
 npm run dev
 ```
 
-Open the local Next.js URL printed by the dev server. The dashboard should render with public OpenDota data when available and fallback data when public requests fail or time out.
+Open the local Next.js URL printed by the dev server. The dashboard should render with public OpenDota data when available, stale cached data when a previous successful fetch exists, and clearly labeled sample data only when no cache exists.
 
 Build and lint before opening a PR:
 
@@ -85,12 +85,13 @@ GET /api/dota/player/:accountId
 GET /api/dota/match/:matchId
 ```
 
-The hero detail route returns a hero summary, matchup matrix, item timings, and lightweight insight summaries. Provider calls are normalized in `src/lib/dota/opendota.ts`; shared response shapes live in `src/lib/dota/types.ts`.
+The hero detail route returns a hero summary, matchup matrix, item timings, and lightweight insight summaries. Provider calls are normalized in `src/lib/dota/opendota.ts`; shared response shapes live in `src/lib/dota/types.ts`. API responses include data freshness metadata and `Last updated` timestamps when live or cached OpenDota data is available.
 
 ## Data Sources
 
 - **OpenDota public API**: the only live provider today. It powers hero stats, hero matchups, item popularity, player recent matches, pro match IDs, parsed match events, ward logs, and lane position samples.
-- **Fallback/sample data**: bundled resilience data for local builds and demos when OpenDota is unavailable. It is non-authoritative and should not be treated as current match or player truth.
+- **Stale OpenDota cache**: the first fallback during warm runtime outages. The UI labels this as stale and shows `Last updated` with the timestamp of the last successful public refresh.
+- **Bundled sample data**: cold-start resilience data for local builds and demos when OpenDota is unavailable and no cache exists. It is non-authoritative and should not be treated as current match or player truth.
 - **Steam Web API**: planned official static/account-backed provider. It is not connected yet and requires explicit credential authorization before use.
 - **STRATZ GraphQL**: planned token-backed provider for patch-specific hero stats, talent distribution, and deeper meta data. It is not connected yet and requires explicit credential authorization before use.
 
@@ -164,7 +165,8 @@ Keep runtime feature work separate from deployment, release, production data, cl
 Allowed by default:
 
 - public, unauthenticated OpenDota API use;
-- fallback/sample data for local resilience;
+- stale cached OpenDota data for warm-runtime outage resilience;
+- bundled sample data for cold-start local resilience only;
 - local lint, build, route smoke, and browser smoke;
 - GitHub issues, branches, PRs, Actions, and low-risk green merges.
 

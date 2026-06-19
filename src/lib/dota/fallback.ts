@@ -125,7 +125,9 @@ export const fallbackMatch: MatchReplay = {
 
 export const fallbackOverview: DotaOverview = {
   generatedAt: new Date().toISOString(),
-  patchVersion: "OpenDota live, fallback snapshot",
+  dataFreshness: "sample",
+  dataLastUpdated: null,
+  patchVersion: "Bundled sample snapshot",
   selectedHero: fallbackHeroes[0],
   heroMeta: fallbackHeroes,
   matchups: fallbackHeroes.slice(1).map((hero, index) => ({
@@ -156,8 +158,8 @@ export const fallbackOverview: DotaOverview = {
     },
   ],
   sources: [
-    { name: "OpenDota", status: "fallback", note: "Using bundled fallback snapshot because live fetch failed." },
-    { name: "Steam Web API", status: "optional", note: "Planned for official static and account-backed data." },
-    { name: "STRATZ GraphQL", status: "optional", note: "Planned for patch, talent, and advanced meta data when token is configured." },
+    { name: "OpenDota", status: "sample", lastUpdated: null, note: "No cached OpenDota data is available; showing bundled sample data for local resilience." },
+    { name: "Steam Web API", status: "optional", lastUpdated: null, note: "Planned for official static and account-backed data." },
+    { name: "STRATZ GraphQL", status: "optional", lastUpdated: null, note: "Planned for patch, talent, and advanced meta data when token is configured." },
   ],
 };
