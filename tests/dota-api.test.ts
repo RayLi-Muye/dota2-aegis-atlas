@@ -6,7 +6,13 @@ import {
   listBuildLookupBoundaries,
   requiresCredentialedProviderForDistribution,
 } from "../src/lib/dota/lookup-boundaries";
-import { getDotaOverview, getHeroDetail, resetOpenDotaCacheForTests } from "../src/lib/dota/opendota";
+import {
+  getDotaOverview,
+  getHeroDetail,
+  getMatchReplay,
+  getPlayerProfile,
+  resetOpenDotaCacheForTests,
+} from "../src/lib/dota/opendota";
 
 type RoutePayload = unknown | Response | Error;
 
@@ -110,6 +116,84 @@ describe("Dota API provider contracts", () => {
     assert.equal(heroDetail.dataLastUpdated, null);
     assert.equal(heroDetail.hero.id, 35);
     assert.match(heroDetail.insight.notes.join(" "), /bundled sample data/);
+  });
+
+  it("uses stale cached player matches before bundled sample profile data", async () => {
+    mockOpenDota({
+      "/heroStats": liveHeroes,
+      "/players/86745912/recentMatches": recentMatches,
+    });
+
+    const liveProfile = await getPlayerProfile("86745912");
+
+    mockOpenDota({
+      "/heroStats": new Response("service unavailable", { status: 503 }),
+      "/players/86745912/recentMatches": new Response("service unavailable", { status: 503 }),
+    });
+
+    const staleProfile = await getPlayerProfile("86745912");
+
+    assert.equal(staleProfile.accountId, "86745912");
+    assert.equal(staleProfile.recentMatches[0].matchId, liveProfile.recentMatches[0].matchId);
+    assert.equal(staleProfile.recentMatches[0].heroName, "Axe");
+    assert.equal(staleProfile.signatureHeroes[0].heroName, "Axe");
+    assert.equal(staleProfile.winRate, liveProfile.winRate);
+  });
+
+  it("uses bundled sample player profile shape only when no OpenDota cache exists", async () => {
+    mockOpenDota({
+      "/heroStats": new Response("service unavailable", { status: 503 }),
+    });
+
+    const profile = await getPlayerProfile("123456");
+
+    assert.equal(profile.accountId, "123456");
+    assert.ok(profile.recentMatches.length > 0);
+    assert.ok(profile.signatureHeroes.length > 0);
+    assert.equal(typeof profile.winRate, "number");
+    assert.equal(typeof profile.avgKda, "number");
+    assert.equal(typeof profile.avgGpm, "number");
+    assert.equal(typeof profile.avgXpm, "number");
+  });
+
+  it("uses stale cached match timeline and map signals before bundled sample replay data", async () => {
+    mockOpenDota({
+      "/heroStats": liveHeroes,
+      "/matches/9001": parsedMatch,
+    });
+
+    const liveReplay = await getMatchReplay(9001);
+
+    mockOpenDota({
+      "/heroStats": new Response("service unavailable", { status: 503 }),
+      "/matches/9001": new Response("service unavailable", { status: 503 }),
+    });
+
+    const staleReplay = await getMatchReplay(9001);
+
+    assert.equal(staleReplay.matchId, liveReplay.matchId);
+    assert.equal(staleReplay.leagueName, "Contract Test League");
+    assert.equal(staleReplay.events[0].type, "CHAT_MESSAGE_FIRSTBLOOD");
+    assert.deepEqual(
+      new Set(staleReplay.mapPoints.map((point) => point.kind)),
+      new Set(["Observer", "Sentry", "Lane"]),
+    );
+    assert.equal(staleReplay.teamfights[0].deaths, 3);
+  });
+
+  it("uses bundled sample match replay shape only when no OpenDota cache exists", async () => {
+    mockOpenDota({
+      "/heroStats": new Response("service unavailable", { status: 503 }),
+    });
+
+    const replay = await getMatchReplay("4242");
+
+    assert.equal(replay.matchId, 4242);
+    assert.ok(replay.events.length > 0);
+    assert.ok(replay.mapPoints.length > 0);
+    assert.ok(replay.teamfights.length > 0);
+    assert.ok(replay.events.every((event) => typeof event.time === "number" && event.label.length > 0));
+    assert.ok(replay.mapPoints.every((point) => typeof point.x === "number" && typeof point.y === "number" && point.label.length > 0));
   });
 });
 
